@@ -45,7 +45,7 @@ void advance(int a)     // 前進
     {
      digitalWrite(pinRB,HIGH);  // 使馬達（右後）動作
      digitalWrite(pinRF,LOW);
-     analogWrite(MotorRPWM,190);
+     analogWrite(MotorRPWM,180);
      digitalWrite(pinLB,HIGH);  // 使馬達（左後）動作
      digitalWrite(pinLF,LOW);
      analogWrite(MotorLPWM,150);
@@ -106,7 +106,7 @@ void back(int g)          //後退
      analogWrite(MotorRPWM,150);
      digitalWrite(pinLB,LOW);  //使馬達（左後）動作
      digitalWrite(pinLF,HIGH);
-     analogWrite(MotorLPWM,190);
+     analogWrite(MotorLPWM,180);
      delay(g * 100);     
     }
     
