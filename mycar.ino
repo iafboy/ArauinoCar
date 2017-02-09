@@ -1,6 +1,5 @@
-//左轮不正，容易跑偏，修改点击速率
-
 #include <Servo.h> 
+#include <LiquidCrystal.h>
 int pinLB=15;     // 定義15腳位 左後
 int pinLF=14;     // 定義14腳位 左前
 
@@ -24,6 +23,8 @@ int Fgo = 8;         // 前進
 int Rgo = 6;         // 右轉
 int Lgo = 4;         // 左轉
 int Bgo = 2;         // 倒車
+//lcd(12,11,5,4,3,2);
+LiquidCrystal lcd(18,13,12,7,6,4);  //定义脚位
 
 void setup()
  {
@@ -40,6 +41,9 @@ void setup()
   pinMode(outputPin, OUTPUT);  // 定義超音波輸出腳位   
 
   myservo.attach(10);    // 定義伺服馬達輸出第10腳位(PWM)
+
+  lcd.begin(16,2); //设置LCD显示的数目。16 X 2：16格2行。
+  lcd.print("Start!"); //将hello,world!显示在LCD上
  }
 void advance(int a)     // 前進
     {
@@ -164,6 +168,10 @@ void ask_pin_F()   // 量出前方距離
       Serial.print("F distance:");      //輸出距離（單位：公分）
       Serial.println(Fdistance);         //顯示距離
       Fspeedd = Fdistance;              // 將距離 讀入Fspeedd(前速)
+      lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
+      lcd.print("F distance:"); 
+      lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
+      lcd.print(Fdistance); 
     }  
  void ask_pin_L()   // 量出左邊距離 
     {
@@ -179,6 +187,10 @@ void ask_pin_F()   // 量出前方距離
       Serial.print("L distance:");       //輸出距離（單位：公分）
       Serial.println(Ldistance);         //顯示距離
       Lspeedd = Ldistance;              // 將距離 讀入Lspeedd(左速)
+      lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
+      lcd.print("L distance:"); 
+      lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
+      lcd.print(Ldistance);
     }  
 void ask_pin_R()   // 量出右邊距離 
     {
@@ -194,6 +206,10 @@ void ask_pin_R()   // 量出右邊距離
       Serial.print("R distance:");       //輸出距離（單位：公分）
       Serial.println(Rdistance);         //顯示距離
       Rspeedd = Rdistance;              // 將距離 讀入Rspeedd(右速)
+      lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
+      lcd.print("R distance:"); 
+      lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
+      lcd.print(Rdistance);
     }  
     
 void loop()
