@@ -1,5 +1,7 @@
 #include <Servo.h>
 #include <LiquidCrystal.h>
+#include <Thread.h>
+#include <StaticThreadController.h>
 int pinLB=15;     // 定義15腳位 左後
 int pinLF=14;     // 定義14腳位 左前
 
@@ -23,30 +25,26 @@ int Fgo = 8;         // 前進
 int Rgo = 6;         // 右轉
 int Lgo = 4;         // 左轉
 int Bgo = 2;         // 倒車
-//lcd(12,11,5,4,3,2);
+
+int minstop=10;
+int minturn=25;
+
+int history_ad_time=0;  //记录上次前进时间
+
 LiquidCrystal lcd(18,13,12,7,6,4);  //定义脚位
 
-int history_ad_time=0;
 
-void setup()
- {
-  Serial.begin(9600);     // 定義馬達輸出腳位
-  pinMode(pinLB,OUTPUT); // 腳位 8 (PWM)
-  pinMode(pinLF,OUTPUT); // 腳位 9 (PWM)
-  pinMode(pinRB,OUTPUT); // 腳位 10 (PWM)
-  pinMode(pinRF,OUTPUT); // 腳位 11 (PWM)
+Thread* runingThread = new Thread();
+Thread* scanThread = new Thread();
+StaticThreadController<2> controll (runingThread, scanThread);
 
-  pinMode(MotorLPWM,  OUTPUT);  // 腳位 3 (PWM)
-  pinMode(MotorRPWM,  OUTPUT);  // 腳位 5 (PWM)
+void cleanParam(){
+  Fspeedd = 0;
+  Rspeedd = 0;
+  Lspeedd = 0;
+  directionn = 0;
+}
 
-  pinMode(inputPin, INPUT);    // 定義超音波輸入腳位
-  pinMode(outputPin, OUTPUT);  // 定義超音波輸出腳位
-
-  myservo.attach(10);    // 定義伺服馬達輸出第10腳位(PWM)
-
-  lcd.begin(16,2); //设置LCD显示的数目。16 X 2：16格2行。
-  lcd.print("Start!"); //将hello,world!显示在LCD上
- }
 void advance(int a)     // 前進
     {
      digitalWrite(pinRB,HIGH);  // 使馬達（右後）動作
@@ -112,50 +110,43 @@ void back(int g)          //後退
      analogWrite(MotorRPWM,150);
      digitalWrite(pinLB,LOW);  //使馬達（左後）動作
      digitalWrite(pinLF,HIGH);
-     analogWrite(MotorLPWM,180);
-     delay(g * 100/5);         //此处是后退上次直线前进距离1/5
+     analogWrite(MotorLPWM,150);
+     if(g>5&&g<15){
+       delay(g * 100/5);         //此处是后退上次直线前进距离1/5
+      }else{
+        delay(1*100);
+      }
     }
 
 void detection()        //測量3個角度(0.90.179)
     {
       int delay_time = 200;   // 伺服馬達轉向後的穩定時間
-      ask_pin_F();            // 讀取前方距離
-
-     if(Fspeedd < 10)         // 假如前方距離小於10公分
-      {
-      stopp(1);               // 清除輸出資料
-      back(2);                // 後退 0.2秒
-      }
-
-      if(Fspeedd < 25)         // 假如前方距離小於25公分
-      {
-        stopp(1);               // 清除輸出資料
+      ask_pin_F();
+      while(Fspeedd < minturn){
+        if(Fspeedd < minstop){  // 假如前方距離小於10公分
+            stopp(1);         // 清除輸出資料
+            back(history_ad_time);
+            detection();
+        }
+        //stopp(1);               // 清除輸出資料
         ask_pin_L();            // 讀取左方距離
         delay(delay_time);      // 等待伺服馬達穩定
         ask_pin_R();            // 讀取右方距離
         delay(delay_time);      // 等待伺服馬達穩定
-
         if(Lspeedd > Rspeedd)   //假如 左邊距離大於右邊距離
         {
          directionn = Lgo;      //向左走
         }
-
         if(Lspeedd <= Rspeedd)   //假如 左邊距離小於或等於右邊距離
         {
          directionn = Rgo;      //向右走
         }
-
         if (Lspeedd < 15 && Rspeedd < 15)   //假如 左邊距離和前方距離和右邊距離皆小於15公分
         {
-
          directionn = Bgo;      //向後走
         }
       }
-      else                      //假如前方不小於(大於)25公分
-      {
-        directionn = Fgo;        //向前走
-      }
-
+      directionn = Fgo;        //向前走
     }
 void ask_pin_F()   // 量出前方距離
     {
@@ -170,6 +161,7 @@ void ask_pin_F()   // 量出前方距離
       Serial.print("F distance:");      //輸出距離（單位：公分）
       Serial.println(Fdistance);         //顯示距離
       Fspeedd = Fdistance;              // 將距離 讀入Fspeedd(前速)
+      lcd.clear();
       lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
       lcd.print("F distance:");
       lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
@@ -189,6 +181,7 @@ void ask_pin_F()   // 量出前方距離
       Serial.print("L distance:");       //輸出距離（單位：公分）
       Serial.println(Ldistance);         //顯示距離
       Lspeedd = Ldistance;              // 將距離 讀入Lspeedd(左速)
+      lcd.clear();
       lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
       lcd.print("L distance:");
       lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
@@ -196,7 +189,7 @@ void ask_pin_F()   // 量出前方距離
     }
 void ask_pin_R()   // 量出右邊距離
     {
-      myservo.write(177);
+      myservo.write(179);
       delay(delay_time);
       digitalWrite(outputPin, LOW);   // 讓超聲波發射低電壓2μs
       delayMicroseconds(2);
@@ -208,22 +201,22 @@ void ask_pin_R()   // 量出右邊距離
       Serial.print("R distance:");       //輸出距離（單位：公分）
       Serial.println(Rdistance);         //顯示距離
       Rspeedd = Rdistance;              // 將距離 讀入Rspeedd(右速)
+      lcd.clear();
       lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
       lcd.print("R distance:");
       lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
       lcd.print(Rdistance);
     }
 
-void loop()
+void processJob()
  {
-    myservo.write(90);  //讓伺服馬達回歸 預備位置 準備下一次的測量
-    detection();        //測量角度 並且判斷要往哪一方向移動
-
    if(directionn == 2)  //假如directionn(方向) = 2(倒車)
    {
      back(history_ad_time);                    //  倒退(車)
      turnL(2);                   //些微向左方移動(防止卡在死巷裡)
+     cleanParam();
      history_ad_time=0;           //上次前进时间清零
+     lcd.clear();
      Serial.print(" Reverse ");   //顯示方向(倒退)
      lcd.setCursor(0,1);
      lcd.print(" Reverse ");
@@ -232,8 +225,10 @@ void loop()
    {
      back(history_ad_time);
      turnR(6);                   // 右轉
+     cleanParam();
      history_ad_time=0;           //上次前进时间清零
      Serial.print(" Right ");    //顯示方向(左轉)
+     lcd.clear();
      lcd.setCursor(0,1);
      lcd.print(" Right ");
    }
@@ -241,17 +236,51 @@ void loop()
    {
      back(history_ad_time);
      turnL(6);                  // 左轉
+     cleanParam();
      history_ad_time=0;           //上次前进时间清零
      Serial.print(" Left ");     //顯示方向(右轉)
+     lcd.clear();
      lcd.setCursor(0,1);
      lcd.print(" Left ");
    }
    if(directionn == 8)          //假如directionn(方向) = 8(前進)
    {
     advance(1);
+    cleanParam();
     history_ad_time++;                 // 正常前進
     Serial.print(" Advance ");   //顯示方向(前進)
+    lcd.clear();
     lcd.setCursor(0,1);
     lcd.print(" Advance ");
    }
+ }
+
+ void setup()
+  {
+   Serial.begin(9600);     // 定義馬達輸出腳位
+   pinMode(pinLB,OUTPUT); // 腳位 8 (PWM)
+   pinMode(pinLF,OUTPUT); // 腳位 9 (PWM)
+   pinMode(pinRB,OUTPUT); // 腳位 10 (PWM)
+   pinMode(pinRF,OUTPUT); // 腳位 11 (PWM)
+
+   pinMode(MotorLPWM,  OUTPUT);  // 腳位 3 (PWM)
+   pinMode(MotorRPWM,  OUTPUT);  // 腳位 5 (PWM)
+
+   pinMode(inputPin, INPUT);    // 定義超音波輸入腳位
+   pinMode(outputPin, OUTPUT);  // 定義超音波輸出腳位
+
+   myservo.attach(10);    // 定義伺服馬達輸出第10腳位(PWM)
+
+   lcd.begin(16,2); //设置LCD显示的数目。16 X 2：16格2行。
+   lcd.print("Start!"); //将hello,world!显示在LCD上
+   //init Thread
+   scanThread->onRun(detection);
+   scanThread->setInterval(50);
+   runingThread->onRun(processJob);
+   runingThread->setInterval(100);
+   controll[2].setInterval(75);
+  }
+void loop(){
+   myservo.write(90);
+   controll.run();
  }
