@@ -111,10 +111,10 @@ void back(int g)          //後退
      digitalWrite(pinLB,LOW);  //使馬達（左後）動作
      digitalWrite(pinLF,HIGH);
      analogWrite(MotorLPWM,150);
-     if(g>5&&g<15){
-       delay(g * 100/5);         //此处是后退上次直线前进距离1/5
+     if(g>4&&g<10){
+       delay(g * 20/5);         //此处是后退上次直线前进距离1/5
       }else{
-        delay(1*100);
+        delay(1*20);
       }
     }
 
@@ -122,31 +122,33 @@ void detection()        //測量3個角度(0.90.179)
     {
       int delay_time = 200;   // 伺服馬達轉向後的穩定時間
       ask_pin_F();
-      while(Fspeedd < minturn){
+      delay(delay_time);
+      ask_pin_L();            // 讀取左方距離
+      delay(delay_time);      // 等待伺服馬達穩定
+      ask_pin_R();            // 讀取右方距離
+      delay(delay_time);      // 等待伺服馬達穩定
+      if(Fspeedd < minturn){
+        stopp(1);         // 清除輸出資料
         if(Fspeedd < minstop){  // 假如前方距離小於10公分
-            stopp(1);         // 清除輸出資料
             back(history_ad_time);
-            detection();
+        }else{
+          if(Lspeedd > Rspeedd)   //假如 左邊距離大於右邊距離
+          {
+            directionn = Lgo;      //向左走
+          }
+          if(Lspeedd <= Rspeedd)   //假如 左邊距離小於或等於右邊距離
+          {
+            directionn = Rgo;      //向右走
+          }
+          if (Lspeedd < 15 && Rspeedd < 15)   //假如 左邊距離和前方距離和右邊距離皆小於15公分
+          {
+            directionn = Bgo;      //向後走
+          }
         }
-        //stopp(1);               // 清除輸出資料
-        ask_pin_L();            // 讀取左方距離
-        delay(delay_time);      // 等待伺服馬達穩定
-        ask_pin_R();            // 讀取右方距離
-        delay(delay_time);      // 等待伺服馬達穩定
-        if(Lspeedd > Rspeedd)   //假如 左邊距離大於右邊距離
-        {
-         directionn = Lgo;      //向左走
-        }
-        if(Lspeedd <= Rspeedd)   //假如 左邊距離小於或等於右邊距離
-        {
-         directionn = Rgo;      //向右走
-        }
-        if (Lspeedd < 15 && Rspeedd < 15)   //假如 左邊距離和前方距離和右邊距離皆小於15公分
-        {
-         directionn = Bgo;      //向後走
-        }
+      }else{
+        directionn = Fgo;        //向前走
       }
-      directionn = Fgo;        //向前走
+
     }
 void ask_pin_F()   // 量出前方距離
     {
