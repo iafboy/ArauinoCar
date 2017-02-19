@@ -25,18 +25,22 @@ int Fgo = 8;         // 前進
 int Rgo = 6;         // 右轉
 int Lgo = 4;         // 左轉
 int Bgo = 2;         // 倒車
+int stop=1;
 
 int minstop=10;
 int minturn=25;
+int baseLimitPWM=60;
+int LLimitPWM=60;
+int RLimitPWM=90;
 
 int history_ad_time=0;  //记录上次前进时间
 
 LiquidCrystal lcd(18,13,12,7,6,4);  //定义脚位
 
 
-Thread* runingThread = new Thread();
-Thread* scanThread = new Thread();
-StaticThreadController<2> controll (runingThread, scanThread);
+//Thread* runingThread = new Thread();
+//Thread* scanThread = new Thread();
+//StaticThreadController<2> controll (runingThread, scanThread);
 
 void cleanParam(){
   Fspeedd = 0;
@@ -49,10 +53,10 @@ void advance(int a)     // 前進
     {
      digitalWrite(pinRB,HIGH);  // 使馬達（右後）動作
      digitalWrite(pinRF,LOW);
-     analogWrite(MotorRPWM,180);
+     analogWrite(MotorRPWM,RLimitPWM);
      digitalWrite(pinLB,HIGH);  // 使馬達（左後）動作
      digitalWrite(pinLF,LOW);
-     analogWrite(MotorLPWM,150);
+     analogWrite(MotorLPWM,LLimitPWM);
      delay(a * 100);
     }
 
@@ -60,7 +64,7 @@ void right(int b)        //右轉(單輪)
     {
      digitalWrite(pinRB,LOW);   //使馬達（右後）動作
      digitalWrite(pinRF,HIGH);
-     analogWrite(MotorRPWM,200);
+     analogWrite(MotorRPWM,RLimitPWM);
      digitalWrite(pinLB,HIGH);
      digitalWrite(pinLF,HIGH);
      delay(b * 100);
@@ -71,27 +75,27 @@ void left(int c)         //左轉(單輪)
      digitalWrite(pinRF,HIGH);
      digitalWrite(pinLB,LOW);   //使馬達（左後）動作
      digitalWrite(pinLF,HIGH);
-     analogWrite(MotorLPWM,200);
+     analogWrite(MotorLPWM,LLimitPWM);
      delay(c * 100);
     }
 void turnR(int d)        //右轉(雙輪)
     {
      digitalWrite(pinRB,HIGH);  //使馬達（右後）動作
      digitalWrite(pinRF,LOW);
-     analogWrite(MotorRPWM,100);
+     analogWrite(MotorRPWM,baseLimitPWM);
      digitalWrite(pinLB,LOW);
      digitalWrite(pinLF,HIGH);  //使馬達（左前）動作
-     analogWrite(MotorLPWM,100);
+     analogWrite(MotorLPWM,baseLimitPWM);
      delay(d * 60);
     }
 void turnL(int e)        //左轉(雙輪)
     {
      digitalWrite(pinRB,LOW);
      digitalWrite(pinRF,HIGH);   //使馬達（右前）動作
-     analogWrite(MotorRPWM,100);
+     analogWrite(MotorRPWM,baseLimitPWM);
      digitalWrite(pinLB,HIGH);   //使馬達（左後）動作
      digitalWrite(pinLF,LOW);
-     analogWrite(MotorLPWM,100);
+     analogWrite(MotorLPWM,baseLimitPWM);
      delay(e * 60);
     }
 void stopp(int f)         //停止
@@ -107,10 +111,10 @@ void back(int g)          //後退
 
      digitalWrite(pinRB,LOW);  //使馬達（右後）動作
      digitalWrite(pinRF,HIGH);
-     analogWrite(MotorRPWM,150);
+     analogWrite(MotorRPWM,RLimitPWM);
      digitalWrite(pinLB,LOW);  //使馬達（左後）動作
      digitalWrite(pinLF,HIGH);
-     analogWrite(MotorLPWM,150);
+     analogWrite(MotorLPWM,LLimitPWM);
      if(g>4&&g<10){
        delay(g * 20/5);         //此处是后退上次直线前进距离1/5
       }else{
@@ -121,31 +125,40 @@ void back(int g)          //後退
 void detection()        //測量3個角度(0.90.179)
     {
       int delay_time = 200;   // 伺服馬達轉向後的穩定時間
-      ask_pin_F();
-      delay(delay_time);
-      ask_pin_L();            // 讀取左方距離
-      delay(delay_time);      // 等待伺服馬達穩定
-      ask_pin_R();            // 讀取右方距離
-      delay(delay_time);      // 等待伺服馬達穩定
-      if(Fspeedd < minturn){
-        stopp(1);         // 清除輸出資料
-        if(Fspeedd < minstop){  // 假如前方距離小於10公分
-            back(history_ad_time);
-        }else{
-          if(Lspeedd > Rspeedd)   //假如 左邊距離大於右邊距離
-          {
-            directionn = Lgo;      //向左走
-          }
-          if(Lspeedd <= Rspeedd)   //假如 左邊距離小於或等於右邊距離
-          {
-            directionn = Rgo;      //向右走
-          }
-          if (Lspeedd < 15 && Rspeedd < 15)   //假如 左邊距離和前方距離和右邊距離皆小於15公分
-          {
-            directionn = Bgo;      //向後走
-          }
+      ask_pin_F();            // 讀取前方距離
+
+     if(Fspeedd < minstop)         // 假如前方距離小於10公分
+      {
+      stopp(1);               // 清除輸出資料
+      back(2);                // 後退 0.2秒
+      }
+
+      if(Fspeedd < minturn)         // 假如前方距離小於25公分
+      {
+        stopp(1);               // 清除輸出資料
+        ask_pin_L();            // 讀取左方距離
+        delay(delay_time);      // 等待伺服馬達穩定
+        ask_pin_R();            // 讀取右方距離
+        delay(delay_time);      // 等待伺服馬達穩定
+
+        if(Lspeedd > Rspeedd)   //假如 左邊距離大於右邊距離
+        {
+         directionn = Lgo;      //向左走
         }
-      }else{
+
+        if(Lspeedd <= Rspeedd)   //假如 左邊距離小於或等於右邊距離
+        {
+         directionn = Rgo;      //向右走
+        }
+
+        if (Lspeedd < 15 && Rspeedd < 15)   //假如 左邊距離和前方距離和右邊距離皆小於15公分
+        {
+
+         directionn = Bgo;      //向後走
+        }
+      }
+      else                      //假如前方不小於(大於)25公分
+      {
         directionn = Fgo;        //向前走
       }
 
@@ -165,7 +178,7 @@ void ask_pin_F()   // 量出前方距離
       Fspeedd = Fdistance;              // 將距離 讀入Fspeedd(前速)
       lcd.clear();
       lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      lcd.print("F distance:");
+      lcd.print("F");
       lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
       lcd.print(Fdistance);
     }
@@ -185,7 +198,7 @@ void ask_pin_F()   // 量出前方距離
       Lspeedd = Ldistance;              // 將距離 讀入Lspeedd(左速)
       lcd.clear();
       lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      lcd.print("L distance:");
+      lcd.print("L");
       lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
       lcd.print(Ldistance);
     }
@@ -205,13 +218,20 @@ void ask_pin_R()   // 量出右邊距離
       Rspeedd = Rdistance;              // 將距離 讀入Rspeedd(右速)
       lcd.clear();
       lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      lcd.print("R distance:");
+      lcd.print("R");
       lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
       lcd.print(Rdistance);
     }
 
 void processJob()
  {
+    if(directionn == 1){
+      stopp(1);
+      lcd.clear();
+      Serial.println(" Stop ");   //顯示方向(倒退)
+      lcd.setCursor(3,0);
+      lcd.print("Stop");
+    }
    if(directionn == 2)  //假如directionn(方向) = 2(倒車)
    {
      back(history_ad_time);                    //  倒退(車)
@@ -219,9 +239,9 @@ void processJob()
      cleanParam();
      history_ad_time=0;           //上次前进时间清零
      lcd.clear();
-     Serial.print(" Reverse ");   //顯示方向(倒退)
-     lcd.setCursor(0,1);
-     lcd.print(" Reverse ");
+     Serial.println("go back ");   //顯示方向(倒退)
+     lcd.setCursor(3,0);
+     lcd.print("go back");
    }
    if(directionn == 6)           //假如directionn(方向) = 6(右轉)
    {
@@ -229,10 +249,10 @@ void processJob()
      turnR(6);                   // 右轉
      cleanParam();
      history_ad_time=0;           //上次前进时间清零
-     Serial.print(" Right ");    //顯示方向(左轉)
+     Serial.println("go Right ");    //顯示方向(左轉)
      lcd.clear();
-     lcd.setCursor(0,1);
-     lcd.print(" Right ");
+     lcd.setCursor(3,0);
+     lcd.print("go Right");
    }
    if(directionn == 4)          //假如directionn(方向) = 4(左轉)
    {
@@ -240,20 +260,20 @@ void processJob()
      turnL(6);                  // 左轉
      cleanParam();
      history_ad_time=0;           //上次前进时间清零
-     Serial.print(" Left ");     //顯示方向(右轉)
+     Serial.println("go Left ");     //顯示方向(右轉)
      lcd.clear();
-     lcd.setCursor(0,1);
-     lcd.print(" Left ");
+     lcd.setCursor(3,0);
+     lcd.print("go Left ");
    }
    if(directionn == 8)          //假如directionn(方向) = 8(前進)
    {
     advance(1);
     cleanParam();
     history_ad_time++;                 // 正常前進
-    Serial.print(" Advance ");   //顯示方向(前進)
+    Serial.println("go  ahead ");   //顯示方向(前進)
     lcd.clear();
-    lcd.setCursor(0,1);
-    lcd.print(" Advance ");
+    lcd.setCursor(3,0);
+    lcd.print("go ahead");
    }
  }
 
@@ -276,13 +296,16 @@ void processJob()
    lcd.begin(16,2); //设置LCD显示的数目。16 X 2：16格2行。
    lcd.print("Start!"); //将hello,world!显示在LCD上
    //init Thread
-   scanThread->onRun(detection);
-   scanThread->setInterval(50);
-   runingThread->onRun(processJob);
-   runingThread->setInterval(100);
-   controll[2].setInterval(75);
+   //scanThread->onRun(detection);
+   //scanThread->setInterval(50);
+   //runingThread->onRun(processJob);
+   //runingThread->setInterval(100);
+   //controll[2].setInterval(75);
   }
 void loop(){
    myservo.write(90);
-   controll.run();
+   //controll.run();
+     detection();
+     processJob();
+     Serial.println("### Loop ###");
  }
