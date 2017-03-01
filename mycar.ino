@@ -1,7 +1,7 @@
 #include <Servo.h>
 #include <LiquidCrystal.h>
-#include <Thread.h>
-#include <StaticThreadController.h>
+//#include <Thread.h>
+//#include <StaticThreadController.h>
 int pinLB=15;     // 定義15腳位 左後
 int pinLF=14;     // 定義14腳位 左前
 
@@ -29,9 +29,9 @@ int stop=1;
 
 int minstop=10;
 int minturn=25;
-int baseLimitPWM=60;
-int LLimitPWM=60;
-int RLimitPWM=90;
+int baseLimitPWM=100;
+int LLimitPWM=150;
+int RLimitPWM=180;
 
 int history_ad_time=0;  //记录上次前进时间
 
