@@ -1,7 +1,10 @@
 #include <Servo.h>
-#include <LiquidCrystal.h>
-//#include <Thread.h>
-//#include <StaticThreadController.h>
+//#include <LiquidCrystal.h>
+#include <Wire.h>
+#include <HMC5883L.h>
+
+HMC5883L compass;
+
 int pinLB=15;     // 定義15腳位 左後
 int pinLF=14;     // 定義14腳位 左前
 
@@ -32,15 +35,14 @@ int minturn=25;
 int baseLimitPWM=100;
 int LLimitPWM=150;
 int RLimitPWM=180;
+int RLimitPWM_=RLimitPWM;
+int LLimitPWM_=LLimitPWM;
 
 int history_ad_time=0;  //记录上次前进时间
 
-LiquidCrystal lcd(18,13,12,7,6,4);  //定义脚位
+float headingDegrees=0.0;
 
-
-//Thread* runingThread = new Thread();
-//Thread* scanThread = new Thread();
-//StaticThreadController<2> controll (runingThread, scanThread);
+//LiquidCrystal lcd(18,13,12,7,6,4);  //LCD定义脚位
 
 void cleanParam(){
   Fspeedd = 0;
@@ -59,6 +61,42 @@ void advance(int a)     // 前進
      analogWrite(MotorLPWM,LLimitPWM);
      delay(a * 100);
     }
+void advance(float t_angle,int runtime){
+  checkDirection();
+  if(round(headingDegrees)>round(t_angle)){
+    RLimitPWM_+=RLimitPWM;
+    LLimitPWM_-=LLimitPWM;
+  }else if(round(headingDegrees)<round(t_angle)){
+    RLimitPWM_-=RLimitPWM;
+    LLimitPWM_+=LLimitPWM;
+  }else{
+    RLimitPWM_=RLimitPWM;
+    LLimitPWM_=LLimitPWM;
+  }
+  digitalWrite(pinRB,HIGH);
+  digitalWrite(pinRF,LOW);
+  analogWrite(MotorRPWM,RLimitPWM_);
+  digitalWrite(pinLB,HIGH);
+  digitalWrite(pinLF,LOW);
+  analogWrite(MotorLPWM,LLimitPWM_);
+  delay(runtime * 100);
+  Serial.println("------------");
+  Serial.println("t_angle :");
+  Serial.println(t_angle);
+  Serial.println("RLimitPWM_ :");
+  Serial.println(RLimitPWM_);
+  Serial.println("LLimitPWM_ :");
+  Serial.println(LLimitPWM_);
+}
+void turn(float t_angle,int runtime){
+  stopp(1);
+  checkDirection();
+  if(round(headingDegrees)>round(t_angle)){
+    right(runtime/5);
+  }else if(round(headingDegrees)<round(t_angle)){
+    left(runtime/5);
+  }
+}
 
 void right(int b)        //右轉(單輪)
     {
@@ -176,11 +214,11 @@ void ask_pin_F()   // 量出前方距離
       Serial.print("F distance:");      //輸出距離（單位：公分）
       Serial.println(Fdistance);         //顯示距離
       Fspeedd = Fdistance;              // 將距離 讀入Fspeedd(前速)
-      lcd.clear();
-      lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      lcd.print("F");
-      lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
-      lcd.print(Fdistance);
+      //lcd.clear();
+      //lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
+      //lcd.print("F");
+      //lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
+      //lcd.print(Fdistance);
     }
  void ask_pin_L()   // 量出左邊距離
     {
@@ -196,11 +234,11 @@ void ask_pin_F()   // 量出前方距離
       Serial.print("L distance:");       //輸出距離（單位：公分）
       Serial.println(Ldistance);         //顯示距離
       Lspeedd = Ldistance;              // 將距離 讀入Lspeedd(左速)
-      lcd.clear();
-      lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      lcd.print("L");
-      lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
-      lcd.print(Ldistance);
+      //lcd.clear();
+      //lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
+      //lcd.print("L");
+      //lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
+      //lcd.print(Ldistance);
     }
 void ask_pin_R()   // 量出右邊距離
     {
@@ -216,21 +254,46 @@ void ask_pin_R()   // 量出右邊距離
       Serial.print("R distance:");       //輸出距離（單位：公分）
       Serial.println(Rdistance);         //顯示距離
       Rspeedd = Rdistance;              // 將距離 讀入Rspeedd(右速)
-      lcd.clear();
-      lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      lcd.print("R");
-      lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
-      lcd.print(Rdistance);
+      //lcd.clear();
+      //lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
+      //lcd.print("R");
+      //lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
+      //lcd.print(Rdistance);
     }
+void checkDirection(){
+  Vector norm = compass.readNormalize();
+  // Calculate heading
+  float heading = atan2(norm.YAxis, norm.XAxis);
+  float declinationAngle = (4.0 + (26.0 / 60.0)) / (180 / M_PI);
+  heading += declinationAngle;
+  // Correct for heading < 0deg and heading > 360deg
+  if (heading < 0)
+  {
+    heading += 2 * PI;
+  }
+
+  if (heading > 2 * PI)
+  {
+    heading -= 2 * PI;
+  }
+  // Convert to degrees
+  headingDegrees = heading * 180/M_PI;
+  // Output
+  Serial.print(" Heading = ");
+  Serial.print(heading);
+  Serial.print(" Degress = ");
+  Serial.print(headingDegrees);
+  Serial.println();
+}
 
 void processJob()
  {
     if(directionn == 1){
       stopp(1);
-      lcd.clear();
       Serial.println(" Stop ");   //顯示方向(倒退)
-      lcd.setCursor(3,0);
-      lcd.print("Stop");
+      //lcd.clear();
+      //lcd.setCursor(3,0);
+      //lcd.print("Stop");
     }
    if(directionn == 2)  //假如directionn(方向) = 2(倒車)
    {
@@ -238,10 +301,10 @@ void processJob()
      turnL(2);                   //些微向左方移動(防止卡在死巷裡)
      cleanParam();
      history_ad_time=0;           //上次前进时间清零
-     lcd.clear();
      Serial.println("go back ");   //顯示方向(倒退)
-     lcd.setCursor(3,0);
-     lcd.print("go back");
+     //lcd.clear();
+     //lcd.setCursor(3,0);
+     //lcd.print("go back");
    }
    if(directionn == 6)           //假如directionn(方向) = 6(右轉)
    {
@@ -250,9 +313,9 @@ void processJob()
      cleanParam();
      history_ad_time=0;           //上次前进时间清零
      Serial.println("go Right ");    //顯示方向(左轉)
-     lcd.clear();
-     lcd.setCursor(3,0);
-     lcd.print("go Right");
+     //lcd.clear();
+     //lcd.setCursor(3,0);
+     //lcd.print("go Right");
    }
    if(directionn == 4)          //假如directionn(方向) = 4(左轉)
    {
@@ -261,9 +324,9 @@ void processJob()
      cleanParam();
      history_ad_time=0;           //上次前进时间清零
      Serial.println("go Left ");     //顯示方向(右轉)
-     lcd.clear();
-     lcd.setCursor(3,0);
-     lcd.print("go Left ");
+     //lcd.clear();
+     //lcd.setCursor(3,0);
+     //lcd.print("go Left ");
    }
    if(directionn == 8)          //假如directionn(方向) = 8(前進)
    {
@@ -271,15 +334,16 @@ void processJob()
     cleanParam();
     history_ad_time++;                 // 正常前進
     Serial.println("go  ahead ");   //顯示方向(前進)
-    lcd.clear();
-    lcd.setCursor(3,0);
-    lcd.print("go ahead");
+    //lcd.clear();
+    //lcd.setCursor(3,0);
+    //lcd.print("go ahead");
    }
  }
 
  void setup()
   {
-   Serial.begin(9600);     // 定義馬達輸出腳位
+   //Serial.begin(9600);     // 定義馬達輸出腳位
+
    pinMode(pinLB,OUTPUT); // 腳位 8 (PWM)
    pinMode(pinLF,OUTPUT); // 腳位 9 (PWM)
    pinMode(pinRB,OUTPUT); // 腳位 10 (PWM)
@@ -293,19 +357,32 @@ void processJob()
 
    myservo.attach(10);    // 定義伺服馬達輸出第10腳位(PWM)
 
-   lcd.begin(16,2); //设置LCD显示的数目。16 X 2：16格2行。
-   lcd.print("Start!"); //将hello,world!显示在LCD上
-   //init Thread
-   //scanThread->onRun(detection);
-   //scanThread->setInterval(50);
-   //runingThread->onRun(processJob);
-   //runingThread->setInterval(100);
-   //controll[2].setInterval(75);
+     // Initialize Initialize HMC5883L
+     Serial.println("Initialize HMC5883L");
+     while (!compass.begin())
+     {
+       Serial.println("Could not find a valid HMC5883L sensor, check wiring!");
+       delay(500);
+     }
+     // Set measurement range
+     compass.setRange(HMC5883L_RANGE_1_3GA);
+     // Set measurement mode
+     compass.setMeasurementMode(HMC5883L_CONTINOUS);
+     // Set data rate
+     compass.setDataRate(HMC5883L_DATARATE_30HZ);
+     // Set number of samples averaged
+     compass.setSamples(HMC5883L_SAMPLES_8);
+     // Set calibration offset. See HMC5883L_calibration.ino
+     compass.setOffset(0, 0);
+     Serial.println("init finished");
+   //lcd.begin(16,2); //设置LCD显示的数目。16 X 2：16格2行。
+   //lcd.print("Start!"); //将hello,world!显示在LCD上
   }
 void loop(){
-   myservo.write(90);
-   //controll.run();
-     detection();
-     processJob();
+     myservo.write(90);
+     //detection();
+     //processJob();
+     float angle_=90.0;
+     advance(angle_,1);
      Serial.println("### Loop ###");
  }
