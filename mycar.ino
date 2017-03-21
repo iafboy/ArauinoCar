@@ -1,7 +1,8 @@
-#include <Servo.h>
-//#include <LiquidCrystal.h>
+#define DHT11_PIN 7
+
 #include <Wire.h>
 #include <HMC5883L.h>
+#include <string.h>
 
 HMC5883L compass;
 
@@ -21,7 +22,6 @@ int Fspeedd = 0;      // 前速
 int Rspeedd = 0;      // 右速
 int Lspeedd = 0;      // 左速
 int directionn = 0;   // 前=8 後=2 左=4 右=6
-Servo myservo;        // 設 myservo
 int delay_time = 250; // 伺服馬達轉向後的穩定時間
 
 int Fgo = 8;         // 前進
@@ -34,15 +34,18 @@ int minstop=10;
 int minturn=25;
 int baseLimitPWM=100;
 int LLimitPWM=150;
-int RLimitPWM=180;
-int RLimitPWM_=RLimitPWM;
+int RLimitPWM=150;
 int LLimitPWM_=LLimitPWM;
+int RLimitPWM_=RLimitPWM;
 
 int history_ad_time=0;  //记录上次前进时间
 
 float headingDegrees=0.0;
 
-//LiquidCrystal lcd(18,13,12,7,6,4);  //LCD定义脚位
+bool debug=false;
+char debugmsg[127];
+//18,13,12,10,6,4  空余脚位
+int cmd;
 
 void cleanParam(){
   Fspeedd = 0;
@@ -51,26 +54,54 @@ void cleanParam(){
   directionn = 0;
 }
 
-void advance(int a)     // 前進
-    {
-     digitalWrite(pinRB,HIGH);  // 使馬達（右後）動作
-     digitalWrite(pinRF,LOW);
-     analogWrite(MotorRPWM,RLimitPWM);
-     digitalWrite(pinLB,HIGH);  // 使馬達（左後）動作
-     digitalWrite(pinLF,LOW);
-     analogWrite(MotorLPWM,LLimitPWM);
-     delay(a * 100);
-    }
+byte read_dht11_dat()
+{
+	byte i = 0;
+	byte result=0;
+	for(i=0; i< 8; i++){
+	     while(!(PINC & _BV(DHT11_PIN)));  // wait for 50us
+	     delayMicroseconds(30);
+	     if(PINC & _BV(DHT11_PIN))
+	     result |=(1<<(7-i));
+             while((PINC & _BV(DHT11_PIN)));  // wait '1' finish
+	}
+	return result;
+}
 void advance(float t_angle,int runtime){
+  char buf[10];
+  memset(debugmsg,0,127);
+  sprintf(buf, "%d",cmd);
+  getEnvInfo();
+  ask_pin_F();
+  //判断前方距离如果小于10cm则停止
+  if(Fspeedd < minstop){
+    stopp(1);
+    return;
+  }
+
   checkDirection();
-  if(round(headingDegrees)>round(t_angle)){
-    RLimitPWM_+=RLimitPWM;
-    LLimitPWM_-=LLimitPWM;
-  }else if(round(headingDegrees)<round(t_angle)){
-    RLimitPWM_-=RLimitPWM;
-    LLimitPWM_+=LLimitPWM;
-  }else{
+  //检查前进角度，并对步进电机进行调速控制转角
+  if(round(headingDegrees)>=270&&round(t_angle)<=90){
+    RLimitPWM_++;
+    LLimitPWM_--;
+  }
+  if(round(headingDegrees)<round(t_angle)){
+    RLimitPWM_++;
+    LLimitPWM_--;
+  }else if(round(headingDegrees)>round(t_angle)){
+    RLimitPWM_--;
+    LLimitPWM_++;
+  }
+  if(RLimitPWM_<50){
     RLimitPWM_=RLimitPWM;
+  }
+  if(LLimitPWM_<50){
+    LLimitPWM_=LLimitPWM;
+  }
+  if(RLimitPWM_>400){
+    RLimitPWM_=RLimitPWM;
+  }
+  if(LLimitPWM_>400){
     LLimitPWM_=LLimitPWM;
   }
   digitalWrite(pinRB,HIGH);
@@ -80,22 +111,27 @@ void advance(float t_angle,int runtime){
   digitalWrite(pinLF,LOW);
   analogWrite(MotorLPWM,LLimitPWM_);
   delay(runtime * 100);
-  Serial.println("------------");
-  Serial.println("t_angle :");
-  Serial.println(t_angle);
-  Serial.println("RLimitPWM_ :");
-  Serial.println(RLimitPWM_);
-  Serial.println("LLimitPWM_ :");
-  Serial.println(LLimitPWM_);
-}
-void turn(float t_angle,int runtime){
-  stopp(1);
-  checkDirection();
-  if(round(headingDegrees)>round(t_angle)){
-    right(runtime/5);
-  }else if(round(headingDegrees)<round(t_angle)){
-    left(runtime/5);
-  }
+
+  //create BLE notification message
+    //发送状态信息
+    strcat(debugmsg,buf);
+    strcat(debugmsg,"|");
+    memset(buf,0,9);
+    sprintf(buf, "%d",(int)round(t_angle));
+    strcat(debugmsg,buf);
+    strcat(debugmsg,"|");
+    memset(buf,0,9);
+    sprintf(buf, "%d",(int)round(headingDegrees));
+    strcat(debugmsg,buf);
+    strcat(debugmsg,"|");
+    memset(buf,0,9);
+    sprintf(buf, "%d",RLimitPWM_);
+    strcat(debugmsg,buf);
+    strcat(debugmsg,"|");
+    memset(buf,0,9);
+    sprintf(buf, "%d",LLimitPWM_);
+    strcat(debugmsg,buf);
+
 }
 
 void right(int b)        //右轉(單輪)
@@ -107,6 +143,7 @@ void right(int b)        //右轉(單輪)
      digitalWrite(pinLF,HIGH);
      delay(b * 100);
     }
+
 void left(int c)         //左轉(單輪)
     {
      digitalWrite(pinRB,HIGH);
@@ -116,6 +153,7 @@ void left(int c)         //左轉(單輪)
      analogWrite(MotorLPWM,LLimitPWM);
      delay(c * 100);
     }
+
 void turnR(int d)        //右轉(雙輪)
     {
      digitalWrite(pinRB,HIGH);  //使馬達（右後）動作
@@ -126,6 +164,7 @@ void turnR(int d)        //右轉(雙輪)
      analogWrite(MotorLPWM,baseLimitPWM);
      delay(d * 60);
     }
+
 void turnL(int e)        //左轉(雙輪)
     {
      digitalWrite(pinRB,LOW);
@@ -136,6 +175,7 @@ void turnL(int e)        //左轉(雙輪)
      analogWrite(MotorLPWM,baseLimitPWM);
      delay(e * 60);
     }
+
 void stopp(int f)         //停止
     {
      digitalWrite(pinRB,HIGH);
@@ -144,6 +184,7 @@ void stopp(int f)         //停止
      digitalWrite(pinLF,HIGH);
      delay(f * 100);
     }
+
 void back(int g)          //後退
     {
 
@@ -160,50 +201,8 @@ void back(int g)          //後退
       }
     }
 
-void detection()        //測量3個角度(0.90.179)
-    {
-      int delay_time = 200;   // 伺服馬達轉向後的穩定時間
-      ask_pin_F();            // 讀取前方距離
-
-     if(Fspeedd < minstop)         // 假如前方距離小於10公分
-      {
-      stopp(1);               // 清除輸出資料
-      back(2);                // 後退 0.2秒
-      }
-
-      if(Fspeedd < minturn)         // 假如前方距離小於25公分
-      {
-        stopp(1);               // 清除輸出資料
-        ask_pin_L();            // 讀取左方距離
-        delay(delay_time);      // 等待伺服馬達穩定
-        ask_pin_R();            // 讀取右方距離
-        delay(delay_time);      // 等待伺服馬達穩定
-
-        if(Lspeedd > Rspeedd)   //假如 左邊距離大於右邊距離
-        {
-         directionn = Lgo;      //向左走
-        }
-
-        if(Lspeedd <= Rspeedd)   //假如 左邊距離小於或等於右邊距離
-        {
-         directionn = Rgo;      //向右走
-        }
-
-        if (Lspeedd < 15 && Rspeedd < 15)   //假如 左邊距離和前方距離和右邊距離皆小於15公分
-        {
-
-         directionn = Bgo;      //向後走
-        }
-      }
-      else                      //假如前方不小於(大於)25公分
-      {
-        directionn = Fgo;        //向前走
-      }
-
-    }
 void ask_pin_F()   // 量出前方距離
     {
-      myservo.write(90);
       digitalWrite(outputPin, LOW);   // 讓超聲波發射低電壓2μs
       delayMicroseconds(2);
       digitalWrite(outputPin, HIGH);  // 讓超聲波發射高電壓10μs，這裡至少是10μs
@@ -211,55 +210,9 @@ void ask_pin_F()   // 量出前方距離
       digitalWrite(outputPin, LOW);    // 維持超聲波發射低電壓
       float Fdistance = pulseIn(inputPin, HIGH);  // 讀差相差時間
       Fdistance= Fdistance/5.8/10;       // 將時間轉為距離距离（單位：公分）
-      Serial.print("F distance:");      //輸出距離（單位：公分）
-      Serial.println(Fdistance);         //顯示距離
       Fspeedd = Fdistance;              // 將距離 讀入Fspeedd(前速)
-      //lcd.clear();
-      //lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      //lcd.print("F");
-      //lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
-      //lcd.print(Fdistance);
     }
- void ask_pin_L()   // 量出左邊距離
-    {
-      myservo.write(5);
-      delay(delay_time);
-      digitalWrite(outputPin, LOW);   // 讓超聲波發射低電壓2μs
-      delayMicroseconds(2);
-      digitalWrite(outputPin, HIGH);  // 讓超聲波發射高電壓10μs，這裡至少是10μs
-      delayMicroseconds(10);
-      digitalWrite(outputPin, LOW);    // 維持超聲波發射低電壓
-      float Ldistance = pulseIn(inputPin, HIGH);  // 讀差相差時間
-      Ldistance= Ldistance/5.8/10;       // 將時間轉為距離距离（單位：公分）
-      Serial.print("L distance:");       //輸出距離（單位：公分）
-      Serial.println(Ldistance);         //顯示距離
-      Lspeedd = Ldistance;              // 將距離 讀入Lspeedd(左速)
-      //lcd.clear();
-      //lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      //lcd.print("L");
-      //lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
-      //lcd.print(Ldistance);
-    }
-void ask_pin_R()   // 量出右邊距離
-    {
-      myservo.write(179);
-      delay(delay_time);
-      digitalWrite(outputPin, LOW);   // 讓超聲波發射低電壓2μs
-      delayMicroseconds(2);
-      digitalWrite(outputPin, HIGH);  // 讓超聲波發射高電壓10μs，這裡至少是10μs
-      delayMicroseconds(10);
-      digitalWrite(outputPin, LOW);    // 維持超聲波發射低電壓
-      float Rdistance = pulseIn(inputPin, HIGH);  // 讀差相差時間
-      Rdistance= Rdistance/5.8/10;       // 將時間轉為距離距离（單位：公分）
-      Serial.print("R distance:");       //輸出距離（單位：公分）
-      Serial.println(Rdistance);         //顯示距離
-      Rspeedd = Rdistance;              // 將距離 讀入Rspeedd(右速)
-      //lcd.clear();
-      //lcd.setCursor(0,0);  //将闪烁的光标设置到column 0, line 0;
-      //lcd.print("R");
-      //lcd.setCursor(0,1);  //将闪烁的光标设置到column 0, line 1;
-      //lcd.print(Rdistance);
-    }
+
 void checkDirection(){
   Vector norm = compass.readNormalize();
   // Calculate heading
@@ -278,71 +231,66 @@ void checkDirection(){
   }
   // Convert to degrees
   headingDegrees = heading * 180/M_PI;
-  // Output
-  Serial.print(" Heading = ");
-  Serial.print(heading);
-  Serial.print(" Degress = ");
-  Serial.print(headingDegrees);
-  Serial.println();
 }
 
-void processJob()
- {
-    if(directionn == 1){
-      stopp(1);
-      Serial.println(" Stop ");   //顯示方向(倒退)
-      //lcd.clear();
-      //lcd.setCursor(3,0);
-      //lcd.print("Stop");
-    }
-   if(directionn == 2)  //假如directionn(方向) = 2(倒車)
-   {
-     back(history_ad_time);                    //  倒退(車)
-     turnL(2);                   //些微向左方移動(防止卡在死巷裡)
-     cleanParam();
-     history_ad_time=0;           //上次前进时间清零
-     Serial.println("go back ");   //顯示方向(倒退)
-     //lcd.clear();
-     //lcd.setCursor(3,0);
-     //lcd.print("go back");
-   }
-   if(directionn == 6)           //假如directionn(方向) = 6(右轉)
-   {
-     back(history_ad_time);
-     turnR(6);                   // 右轉
-     cleanParam();
-     history_ad_time=0;           //上次前进时间清零
-     Serial.println("go Right ");    //顯示方向(左轉)
-     //lcd.clear();
-     //lcd.setCursor(3,0);
-     //lcd.print("go Right");
-   }
-   if(directionn == 4)          //假如directionn(方向) = 4(左轉)
-   {
-     back(history_ad_time);
-     turnL(6);                  // 左轉
-     cleanParam();
-     history_ad_time=0;           //上次前进时间清零
-     Serial.println("go Left ");     //顯示方向(右轉)
-     //lcd.clear();
-     //lcd.setCursor(3,0);
-     //lcd.print("go Left ");
-   }
-   if(directionn == 8)          //假如directionn(方向) = 8(前進)
-   {
-    advance(1);
-    cleanParam();
-    history_ad_time++;                 // 正常前進
-    Serial.println("go  ahead ");   //顯示方向(前進)
-    //lcd.clear();
-    //lcd.setCursor(3,0);
-    //lcd.print("go ahead");
-   }
- }
+void getEnvInfo(){
+  byte dht11_dat[5];
+	byte dht11_in;
+	byte i;
+	// start condition
+	// 1. pull-down i/o pin from 18ms
+	PORTC &= ~_BV(DHT11_PIN);
+	delay(18);
+	PORTC |= _BV(DHT11_PIN);
+	delayMicroseconds(40);
+	DDRC &= ~_BV(DHT11_PIN);
+	delayMicroseconds(40);
+	dht11_in = PINC & _BV(DHT11_PIN);
+	if(dht11_in){
+    // dht11 start condition 1 not met
+		strcat(debugmsg,"err1|");
+		return;
+	}
+	delayMicroseconds(80);
+	dht11_in = PINC & _BV(DHT11_PIN);
+	if(!dht11_in){
+    //dht11 start condition 2 not met
+		strcat(debugmsg,"err2|");
+		return;
+	}
+	delayMicroseconds(80);
+	// now ready for data reception
+	for (i=0; i<5; i++)
+		dht11_dat[i] = read_dht11_dat();
+	DDRC |= _BV(DHT11_PIN);
+	PORTC |= _BV(DHT11_PIN);
+  byte dht11_check_sum = dht11_dat[0]+dht11_dat[1]+dht11_dat[2]+dht11_dat[3];
+	// check check_sum
+	if(dht11_dat[4]!= dht11_check_sum)
+	{
+    // DHT11 checksum error
+		strcat(debugmsg,"err3|");
+	}
+  char info[10];
+  memset(info,0,9);
+	strcat(debugmsg,"|");
+	sprintf(info,"%d",dht11_dat[0]);
+	strcat(debugmsg,".");
+  memset(info,0,9);
+	sprintf(info,"%d",dht11_dat[1]);
+  memset(info,0,9);
+	strcat(debugmsg,"|");
+	sprintf(info,"%d",dht11_dat[2]);
+	strcat(debugmsg,".");
+  memset(info,0,9);
+	sprintf(info,"%d",dht11_dat[3]);
+  strcat(debugmsg,"|");
+}
+ void setup(){
+   DDRC |= _BV(DHT11_PIN);
+   PORTC |= _BV(DHT11_PIN);
 
- void setup()
-  {
-   //Serial.begin(9600);     // 定義馬達輸出腳位
+   Serial.begin(9600);
 
    pinMode(pinLB,OUTPUT); // 腳位 8 (PWM)
    pinMode(pinLF,OUTPUT); // 腳位 9 (PWM)
@@ -354,16 +302,10 @@ void processJob()
 
    pinMode(inputPin, INPUT);    // 定義超音波輸入腳位
    pinMode(outputPin, OUTPUT);  // 定義超音波輸出腳位
-
-   myservo.attach(10);    // 定義伺服馬達輸出第10腳位(PWM)
-
-     // Initialize Initialize HMC5883L
-     Serial.println("Initialize HMC5883L");
-     while (!compass.begin())
-     {
-       Serial.println("Could not find a valid HMC5883L sensor, check wiring!");
-       delay(500);
-     }
+   while (!compass.begin()){
+     Serial.println("Could not find a valid HMC5883L sensor, check wiring!");
+     delay(500);
+   }
      // Set measurement range
      compass.setRange(HMC5883L_RANGE_1_3GA);
      // Set measurement mode
@@ -374,15 +316,19 @@ void processJob()
      compass.setSamples(HMC5883L_SAMPLES_8);
      // Set calibration offset. See HMC5883L_calibration.ino
      compass.setOffset(0, 0);
-     Serial.println("init finished");
-   //lcd.begin(16,2); //设置LCD显示的数目。16 X 2：16格2行。
-   //lcd.print("Start!"); //将hello,world!显示在LCD上
   }
 void loop(){
-     myservo.write(90);
-     //detection();
-     //processJob();
-     float angle_=90.0;
-     advance(angle_,1);
-     Serial.println("### Loop ###");
+  debug=false;
+  //从BLE中读取新指令
+  if(Serial.available()){
+    cmd=Serial.read();
+  }
+  //取得指令(任务号，角度，时间)
+  float angle_=20.0;
+  advance(angle_,1);
+  //通过蓝牙发送命令
+  Serial.println(debugmsg);
+  if(debug){
+    Serial.println("### Loop ###");
+  }
  }
