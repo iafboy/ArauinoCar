@@ -50,7 +50,6 @@ char debugmsg[127];
 //18,13,12 ,0,1 空余脚位
 //蓝牙通讯接口
 SoftwareSerial BTSerial(4, 6);//RX,TX for BLE
-int taskId;
 
 void cleanParam(){
   Fspeedd = 0;
@@ -75,7 +74,6 @@ void cleanParam(){
 void advance(float t_angle,int runtime){
   char buf[10];
   memset(debugmsg,0,127);
-  sprintf(buf, "%d",taskId);
   //getEnvInfo();
   ask_pin_F();
   //判断前方距离如果小于10cm则停止
@@ -120,8 +118,6 @@ void advance(float t_angle,int runtime){
 
   //create BLE notification message
     //发送状态信息
-    strcat(debugmsg,buf);
-    strcat(debugmsg,",");
     memset(buf,0,9);
     sprintf(buf, "%d",(int)round(t_angle));
     strcat(debugmsg,buf);
@@ -143,26 +139,6 @@ void advance(float t_angle,int runtime){
     strcat(debugmsg,buf);
 
 }
-
-void right(int b)        //右轉(單輪)
-    {
-     digitalWrite(pinRB,LOW);   //使馬達（右後）動作
-     digitalWrite(pinRF,HIGH);
-     analogWrite(MotorRPWM,RLimitPWM);
-     digitalWrite(pinLB,HIGH);
-     digitalWrite(pinLF,HIGH);
-     delay(b * 100);
-    }
-
-void left(int c)         //左轉(單輪)
-    {
-     digitalWrite(pinRB,HIGH);
-     digitalWrite(pinRF,HIGH);
-     digitalWrite(pinLB,LOW);   //使馬達（左後）動作
-     digitalWrite(pinLF,HIGH);
-     analogWrite(MotorLPWM,LLimitPWM);
-     delay(c * 100);
-    }
 
 void turnR(int d)        //右轉(雙輪)
     {
@@ -204,11 +180,7 @@ void back(int g)          //後退
      digitalWrite(pinLB,LOW);  //使馬達（左後）動作
      digitalWrite(pinLF,HIGH);
      analogWrite(MotorLPWM,LLimitPWM);
-     if(g>4&&g<10){
-       delay(g * 20/5);         //此处是后退上次直线前进距离1/5
-      }else{
-        delay(1*20);
-      }
+     delay(g * 100);
     }
 
 void ask_pin_F()   // 量出前方距離
@@ -336,31 +308,49 @@ void checkDirection(){
 void loop(){
   //从BLE中读取新指令
    String cmd="";
+   String taskId="";
    while (BTSerial.available() > 0)
     {
         cmd += char(BTSerial.read());
         delay(2);
     }
     //for debug
-    cmd="1,0.0,400,1";
+    cmd="a1,90.0,1";
+
     if (cmd.length() > 0)
     {
-        Serial.println(cmd);
-        //取得指令(任务号，角度，时间,速度)
-        taskId=1;
-        float angle_=0.0;
-        int runtime=400;
-        int speed=400;
+        if(debug){
+          Serial.println(cmd);
+        }
+        //取得指令(任务号，角度,-1/0/1/2/3)最后-1倒退0为停止1为前进2为左转3为右转
+        int index = cmd.indexOf(',');
+        taskId= cmd.substring(0, index);
+        index=index+1;
+        float angle_ = cmd.substring(index, cmd.length()-2).toFloat();
+        int oper=cmd.substring(cmd.length()-1, cmd.length()).toInt();
+        switch (oper){
+          case -1:
+            back(1);
+            break;
+          case 0:
+            stopp(1);
+            break;
+          case 1:
+            advance(angle_,1);
+            break;
+          case 2:
+            turnL(1);
+            break;
+          case 3:
+            turnL(1);
+            break;
+        }
 
-        LLimitPWM=speed;
-        RLimitPWM=speed;
-        //检查是否已经到了运行的时间限制+需要加装时间计时器
-        advance(angle_,1);
-        //通过蓝牙发送命令
-        BTSerial.println(debugmsg);
+        //通过BLE广播状态信息
+        BTSerial.println(taskId+","+debugmsg);
       }
       if(debug){
-        Serial.println(debugmsg);
+        Serial.println(taskId+","+debugmsg);
         Serial.println("### Loop ###");
       }
  }
