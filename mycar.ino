@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include <HMC5883L.h>
 #include <string.h>
+#include <SoftwareSerial.h>
 
 HMC5883L compass;
 
@@ -30,11 +31,13 @@ int Lgo = 4;         // 左轉
 int Bgo = 2;         // 倒車
 int stop=1;
 
+float Fdistance=999.0;
+
 int minstop=10;
 int minturn=25;
 int baseLimitPWM=100;
-int LLimitPWM=150;
-int RLimitPWM=150;
+int LLimitPWM=400;
+int RLimitPWM=400;
 int LLimitPWM_=LLimitPWM;
 int RLimitPWM_=RLimitPWM;
 
@@ -42,10 +45,12 @@ int history_ad_time=0;  //记录上次前进时间
 
 float headingDegrees=0.0;
 
-bool debug=false;
+bool debug=true;
 char debugmsg[127];
-//18,13,12,10,6,4  空余脚位
-int cmd;
+//18,13,12 ,0,1 空余脚位
+//蓝牙通讯接口
+SoftwareSerial BTSerial(4, 6);//RX,TX for BLE
+int taskId;
 
 void cleanParam(){
   Fspeedd = 0;
@@ -54,28 +59,29 @@ void cleanParam(){
   directionn = 0;
 }
 
-byte read_dht11_dat()
-{
-	byte i = 0;
-	byte result=0;
-	for(i=0; i< 8; i++){
-	     while(!(PINC & _BV(DHT11_PIN)));  // wait for 50us
-	     delayMicroseconds(30);
-	     if(PINC & _BV(DHT11_PIN))
-	     result |=(1<<(7-i));
-             while((PINC & _BV(DHT11_PIN)));  // wait '1' finish
-	}
-	return result;
-}
+// byte read_dht11_dat()
+// {
+// 	byte i = 0;
+// 	byte result=0;
+// 	for(i=0; i< 8; i++){
+// 	     while(!(PINC & _BV(DHT11_PIN)));  // wait for 50us
+// 	     delayMicroseconds(30);
+// 	     if(PINC & _BV(DHT11_PIN))
+// 	     result |=(1<<(7-i));
+//              while((PINC & _BV(DHT11_PIN)));  // wait '1' finish
+// 	}
+// 	return result;
+// }
 void advance(float t_angle,int runtime){
   char buf[10];
   memset(debugmsg,0,127);
-  sprintf(buf, "%d",cmd);
-  getEnvInfo();
+  sprintf(buf, "%d",taskId);
+  //getEnvInfo();
   ask_pin_F();
   //判断前方距离如果小于10cm则停止
   if(Fspeedd < minstop){
     stopp(1);
+    strcat(debugmsg,"stop");
     return;
   }
 
@@ -110,24 +116,28 @@ void advance(float t_angle,int runtime){
   digitalWrite(pinLB,HIGH);
   digitalWrite(pinLF,LOW);
   analogWrite(MotorLPWM,LLimitPWM_);
-  delay(runtime * 100);
+  delay(runtime * 10);
 
   //create BLE notification message
     //发送状态信息
     strcat(debugmsg,buf);
-    strcat(debugmsg,"|");
+    strcat(debugmsg,",");
     memset(buf,0,9);
     sprintf(buf, "%d",(int)round(t_angle));
     strcat(debugmsg,buf);
-    strcat(debugmsg,"|");
+    strcat(debugmsg,",");
     memset(buf,0,9);
     sprintf(buf, "%d",(int)round(headingDegrees));
     strcat(debugmsg,buf);
-    strcat(debugmsg,"|");
+    strcat(debugmsg,",");
+    memset(buf,0,9);
+    sprintf(buf, "%d",(int)round(Fdistance));
+    strcat(debugmsg,buf);
+    strcat(debugmsg,",");
     memset(buf,0,9);
     sprintf(buf, "%d",RLimitPWM_);
     strcat(debugmsg,buf);
-    strcat(debugmsg,"|");
+    strcat(debugmsg,",");
     memset(buf,0,9);
     sprintf(buf, "%d",LLimitPWM_);
     strcat(debugmsg,buf);
@@ -208,7 +218,7 @@ void ask_pin_F()   // 量出前方距離
       digitalWrite(outputPin, HIGH);  // 讓超聲波發射高電壓10μs，這裡至少是10μs
       delayMicroseconds(10);
       digitalWrite(outputPin, LOW);    // 維持超聲波發射低電壓
-      float Fdistance = pulseIn(inputPin, HIGH);  // 讀差相差時間
+      Fdistance = pulseIn(inputPin, HIGH);  // 讀差相差時間
       Fdistance= Fdistance/5.8/10;       // 將時間轉為距離距离（單位：公分）
       Fspeedd = Fdistance;              // 將距離 讀入Fspeedd(前速)
     }
@@ -232,65 +242,68 @@ void checkDirection(){
   // Convert to degrees
   headingDegrees = heading * 180/M_PI;
 }
+//取到当前温度信息以及湿度信息
+// void getEnvInfo(){
+//   byte dht11_dat[5];
+// 	byte dht11_in;
+// 	byte i;
+// 	// start condition
+// 	// 1. pull-down i/o pin from 18ms
+// 	PORTC &= ~_BV(DHT11_PIN);
+// 	delay(18);
+// 	PORTC |= _BV(DHT11_PIN);
+// 	delayMicroseconds(40);
+// 	DDRC &= ~_BV(DHT11_PIN);
+// 	delayMicroseconds(40);
+// 	dht11_in = PINC & _BV(DHT11_PIN);
+// 	if(dht11_in){
+//     // dht11 start condition 1 not met
+// 		strcat(debugmsg,"err1,");
+// 		return;
+// 	}
+// 	delayMicroseconds(80);
+// 	dht11_in = PINC & _BV(DHT11_PIN);
+// 	if(!dht11_in){
+//     //dht11 start condition 2 not met
+// 		strcat(debugmsg,"err2,");
+// 		return;
+// 	}
+// 	delayMicroseconds(80);
+// 	// now ready for data reception
+// 	for (i=0; i<5; i++)
+// 		dht11_dat[i] = read_dht11_dat();
+// 	DDRC |= _BV(DHT11_PIN);
+// 	PORTC |= _BV(DHT11_PIN);
+//   byte dht11_check_sum = dht11_dat[0]+dht11_dat[1]+dht11_dat[2]+dht11_dat[3];
+// 	// check check_sum
+// 	if(dht11_dat[4]!= dht11_check_sum)
+// 	{
+//     // DHT11 checksum error
+// 		strcat(debugmsg,"err3,");
+// 	}
+//   char info[10];
+//   memset(info,0,9);
+// 	strcat(debugmsg,",");
+// 	sprintf(info,"%d",dht11_dat[0]);
+// 	strcat(debugmsg,".");
+//   memset(info,0,9);
+// 	sprintf(info,"%d",dht11_dat[1]);
+//   memset(info,0,9);
+// 	strcat(debugmsg,",");
+// 	sprintf(info,"%d",dht11_dat[2]);
+// 	strcat(debugmsg,".");
+//   memset(info,0,9);
+// 	sprintf(info,"%d",dht11_dat[3]);
+//   strcat(debugmsg,",");
+// }
 
-void getEnvInfo(){
-  byte dht11_dat[5];
-	byte dht11_in;
-	byte i;
-	// start condition
-	// 1. pull-down i/o pin from 18ms
-	PORTC &= ~_BV(DHT11_PIN);
-	delay(18);
-	PORTC |= _BV(DHT11_PIN);
-	delayMicroseconds(40);
-	DDRC &= ~_BV(DHT11_PIN);
-	delayMicroseconds(40);
-	dht11_in = PINC & _BV(DHT11_PIN);
-	if(dht11_in){
-    // dht11 start condition 1 not met
-		strcat(debugmsg,"err1|");
-		return;
-	}
-	delayMicroseconds(80);
-	dht11_in = PINC & _BV(DHT11_PIN);
-	if(!dht11_in){
-    //dht11 start condition 2 not met
-		strcat(debugmsg,"err2|");
-		return;
-	}
-	delayMicroseconds(80);
-	// now ready for data reception
-	for (i=0; i<5; i++)
-		dht11_dat[i] = read_dht11_dat();
-	DDRC |= _BV(DHT11_PIN);
-	PORTC |= _BV(DHT11_PIN);
-  byte dht11_check_sum = dht11_dat[0]+dht11_dat[1]+dht11_dat[2]+dht11_dat[3];
-	// check check_sum
-	if(dht11_dat[4]!= dht11_check_sum)
-	{
-    // DHT11 checksum error
-		strcat(debugmsg,"err3|");
-	}
-  char info[10];
-  memset(info,0,9);
-	strcat(debugmsg,"|");
-	sprintf(info,"%d",dht11_dat[0]);
-	strcat(debugmsg,".");
-  memset(info,0,9);
-	sprintf(info,"%d",dht11_dat[1]);
-  memset(info,0,9);
-	strcat(debugmsg,"|");
-	sprintf(info,"%d",dht11_dat[2]);
-	strcat(debugmsg,".");
-  memset(info,0,9);
-	sprintf(info,"%d",dht11_dat[3]);
-  strcat(debugmsg,"|");
-}
+//初始化
  void setup(){
-   DDRC |= _BV(DHT11_PIN);
-   PORTC |= _BV(DHT11_PIN);
+   //DDRC |= _BV(DHT11_PIN);
+   //PORTC |= _BV(DHT11_PIN);
 
    Serial.begin(9600);
+   BTSerial.begin(9600);
 
    pinMode(pinLB,OUTPUT); // 腳位 8 (PWM)
    pinMode(pinLF,OUTPUT); // 腳位 9 (PWM)
@@ -303,7 +316,7 @@ void getEnvInfo(){
    pinMode(inputPin, INPUT);    // 定義超音波輸入腳位
    pinMode(outputPin, OUTPUT);  // 定義超音波輸出腳位
    while (!compass.begin()){
-     Serial.println("Could not find a valid HMC5883L sensor, check wiring!");
+     Serial.println("err0,");
      delay(500);
    }
      // Set measurement range
@@ -316,19 +329,38 @@ void getEnvInfo(){
      compass.setSamples(HMC5883L_SAMPLES_8);
      // Set calibration offset. See HMC5883L_calibration.ino
      compass.setOffset(0, 0);
+     Serial.println("start");
   }
+
+//运行主体
 void loop(){
-  debug=false;
   //从BLE中读取新指令
-  if(Serial.available()){
-    cmd=Serial.read();
-  }
-  //取得指令(任务号，角度，时间)
-  float angle_=20.0;
-  advance(angle_,1);
-  //通过蓝牙发送命令
-  Serial.println(debugmsg);
-  if(debug){
-    Serial.println("### Loop ###");
-  }
+   String cmd="";
+   while (BTSerial.available() > 0)
+    {
+        cmd += char(BTSerial.read());
+        delay(2);
+    }
+    //for debug
+    cmd="1,0.0,400,1";
+    if (cmd.length() > 0)
+    {
+        Serial.println(cmd);
+        //取得指令(任务号，角度，时间,速度)
+        taskId=1;
+        float angle_=0.0;
+        int runtime=400;
+        int speed=400;
+
+        LLimitPWM=speed;
+        RLimitPWM=speed;
+        //检查是否已经到了运行的时间限制+需要加装时间计时器
+        advance(angle_,1);
+        //通过蓝牙发送命令
+        BTSerial.println(debugmsg);
+      }
+      if(debug){
+        Serial.println(debugmsg);
+        Serial.println("### Loop ###");
+      }
  }
