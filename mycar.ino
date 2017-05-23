@@ -399,13 +399,11 @@ void checkDirection(){
 void loop(){
   //自检主机方向信息
   checkDirection();
-  //从蓝牙中读取新指令
-   while (BTSerial.available() > 0)
-    {
+  //从蓝牙SPP中读取新指令并非从BLE中读取
+   while (BTSerial.available() > 0){
         cmd += char(BTSerial.read());
         delay(2);
     }
-
     //for debug
     //cmd="a1,3,90.0";
     //取得新指令
