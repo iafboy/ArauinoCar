@@ -1,4 +1,4 @@
-#define DHT11_PIN 7
+////#define DHT11_PIN 7
 
 #include <Wire.h>
 #include <HMC5883L.h>
@@ -41,10 +41,8 @@ int RLimitPWM=baseLimitPWM;
 int LLimitPWM_=LLimitPWM;
 int RLimitPWM_=RLimitPWM;
 
-int history_ad_time=0;  //记录上次前进时间
-
 float headingDegrees=0.0;
-float tolerance=10.0;
+float tolerance=5.0;//角度偏差允许范围
 
 String cmd="";
 String taskId="";
@@ -288,7 +286,8 @@ void checkDirection(){
   Vector norm = compass.readNormalize();
   // Calculate heading
   float heading = atan2(norm.YAxis, norm.XAxis);
-  float declinationAngle = (4.0 + (26.0 / 60.0)) / (180 / M_PI);
+  //计算磁偏角，北京地区为5分50
+  float declinationAngle = (5.0 + (50.0 / 60.0)) / (180 / M_PI);
   heading += declinationAngle;
   // Correct for heading < 0deg and heading > 360deg
   if (heading < 0)
