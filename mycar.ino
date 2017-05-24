@@ -289,7 +289,7 @@ void checkDirection(){
   //计算磁偏角，北京地区为5分50
   float declinationAngle = (5.0 + (50.0 / 60.0)) / (180 / M_PI);
   heading += declinationAngle;
-  // Correct for heading < 0deg and heading > 360deg
+  // Correct for heading < 0 deg and heading > 360deg
   if (heading < 0)
   {
     heading += 2 * PI;
