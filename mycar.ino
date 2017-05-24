@@ -44,6 +44,7 @@ int RLimitPWM_=RLimitPWM;
 int history_ad_time=0;  //记录上次前进时间
 
 float headingDegrees=0.0;
+float tolerance=10.0;
 
 String cmd="";
 String taskId="";
@@ -139,10 +140,10 @@ void advance(float t_angle,int runtime){
     RLimitPWM_++;
     LLimitPWM_--;
   }
-  if(round(headingDegrees)<round(t_angle)){
+  if(round(t_angle)-round(headingDegrees)>tolerance){
     RLimitPWM_++;
     LLimitPWM_--;
-  }else if(round(headingDegrees)>round(t_angle)){
+  }else if(round(headingDegrees)-round(t_angle)>tolerance){
     RLimitPWM_--;
     LLimitPWM_++;
   }
@@ -195,7 +196,7 @@ void turnR(float t_angle,int d)        //右轉(雙輪)
      char buf[10];
      memset(debugmsg,0,127);
      checkDirection();
-     if(round(headingDegrees)!=round(t_angle)){
+     if(abs(round(headingDegrees)-round(t_angle))>tolerance){
        memset(buf,0,9);
        sprintf(buf, "R");
        strcat(debugmsg,buf);
@@ -223,7 +224,7 @@ void turnL(float t_angle,int e){
      char buf[10];
      memset(debugmsg,0,127);
      checkDirection();
-     if(round(headingDegrees)!=round(t_angle)){
+     if(abs(round(headingDegrees)-round(t_angle))>tolerance){
         memset(buf,0,9);
         sprintf(buf, "L");
         strcat(debugmsg,buf);
@@ -399,7 +400,7 @@ void checkDirection(){
 void loop(){
   //自检主机方向信息
   checkDirection();
-  //从蓝牙SPP中读取新指令并非从BLE中读取
+  //从蓝牙SPP中读取新指令（并非从BLE中读取）
    while (BTSerial.available() > 0){
         cmd += char(BTSerial.read());
         delay(2);
