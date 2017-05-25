@@ -79,114 +79,122 @@ void advn(long deadline,int runtime){
     char buf[10];
     memset(debugmsg,0,127);
     long currtime=millis();
-    if(currtime>=deadline){
-      stopp(1);
-      strcat(debugmsg,"Tstop");
-      finishTask=true;
-      return;
+    while(currtime<deadline){
+      detect_F();
+      //判断前方距离如果小于10cm则停止
+      if(Fspeedd < minstop){
+        stopp(1);
+        strcat(debugmsg,"stop");
+        return;
+      }
+      //create BLE notification message
+      //发送状态信息
+      memset(buf,0,9);
+      strcat(debugmsg,"A");
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      strcat(buf,(int)round(headingDegrees));
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      sprintf(buf, "%d",(int)round(Fdistance));
+      strcat(debugmsg,buf);
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      sprintf(buf, "%d",RLimitPWM_);
+      strcat(debugmsg,buf);
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      sprintf(buf, "%d",LLimitPWM_);
+      strcat(debugmsg,buf);
+      if(debug){
+        Serial.println(taskId+","+beginTime+","+debugmsg);
+      }
+      BTSerial.println(taskId+","+beginTime+","+debugmsg);
+      //驱动电机
+      digitalWrite(pinRB,HIGH);
+      digitalWrite(pinRF,LOW);
+      analogWrite(MotorRPWM,RLimitPWM_);
+      digitalWrite(pinLB,HIGH);
+      digitalWrite(pinLF,LOW);
+      analogWrite(MotorLPWM,LLimitPWM_);
+      delay(10);
+      //取当前时间
+      currtime=millis();
     }
-    ask_pin_F();
-    //判断前方距离如果小于10cm则停止
-    if(Fspeedd < minstop){
-      stopp(1);
-      strcat(debugmsg,"stop");
-      return;
-    }
-    //create BLE notification message
-    //发送状态信息
-    memset(buf,0,9);
-    strcat(debugmsg,"A");
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    strcat(buf,(int)round(headingDegrees));
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    sprintf(buf, "%d",(int)round(Fdistance));
-    strcat(debugmsg,buf);
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    sprintf(buf, "%d",RLimitPWM_);
-    strcat(debugmsg,buf);
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    sprintf(buf, "%d",LLimitPWM_);
-    strcat(debugmsg,buf);
-    //驱动电机
-    digitalWrite(pinRB,HIGH);
-    digitalWrite(pinRF,LOW);
-    analogWrite(MotorRPWM,RLimitPWM_);
-    digitalWrite(pinLB,HIGH);
-    digitalWrite(pinLF,LOW);
-    analogWrite(MotorLPWM,LLimitPWM_);
-    delay(runtime * 10);
+    stopp(1);
+    strcat(debugmsg,"Tstop");
+    finishTask=true;
+    return;
 }
 void advance(float t_angle,int runtime){
   char buf[10];
   memset(debugmsg,0,127);
-  //getEnvInfo();
-  ask_pin_F();
-  //判断前方距离如果小于10cm则停止
-  if(Fspeedd < minstop){
-    stopp(1);
-    strcat(debugmsg,"stop");
-    return;
-  }
+  while(abs(round(headingDegrees)-round(t_angle))>tolerance){
+      detect_F();
+      //判断前方距离如果小于10cm则停止
+      if(Fspeedd < minstop){
+        stopp(1);
+        strcat(debugmsg,"stop");
+        return;
+      }
 
-  checkDirection();
-  //检查前进角度，并对步进电机进行调速控制转角
-  if(round(headingDegrees)>=270&&round(t_angle)<=90){
-    RLimitPWM_++;
-    LLimitPWM_--;
-  }
-  if(round(t_angle)-round(headingDegrees)>tolerance){
-    RLimitPWM_++;
-    LLimitPWM_--;
-  }else if(round(headingDegrees)-round(t_angle)>tolerance){
-    RLimitPWM_--;
-    LLimitPWM_++;
-  }
-  if(RLimitPWM_<50){
-    RLimitPWM_=RLimitPWM;
-  }
-  if(LLimitPWM_<50){
-    LLimitPWM_=LLimitPWM;
-  }
-  if(RLimitPWM_>400){
-    RLimitPWM_=RLimitPWM;
-  }
-  if(LLimitPWM_>400){
-    LLimitPWM_=LLimitPWM;
-  }
+      checkDirection();
+      //检查前进角度，并对步进电机进行调速控制转角
+      if(round(headingDegrees)>=270&&round(t_angle)<=90){
+        RLimitPWM_++;
+        LLimitPWM_--;
+      }
+      if(round(t_angle)-round(headingDegrees)>tolerance){
+        RLimitPWM_++;
+        LLimitPWM_--;
+      }else if(round(headingDegrees)-round(t_angle)>tolerance){
+        RLimitPWM_--;
+        LLimitPWM_++;
+      }
+      if(RLimitPWM_<50){
+        RLimitPWM_=RLimitPWM;
+      }
+      if(LLimitPWM_<50){
+        LLimitPWM_=LLimitPWM;
+      }
+      if(RLimitPWM_>400){
+        RLimitPWM_=RLimitPWM;
+      }
+      if(LLimitPWM_>400){
+        LLimitPWM_=LLimitPWM;
+      }
+      //发送状态信息
+      memset(buf,0,9);
+      sprintf(buf, "%d",(int)round(t_angle));
+      strcat(debugmsg,buf);
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      sprintf(buf, "%d",(int)round(headingDegrees));
+      strcat(debugmsg,buf);
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      sprintf(buf, "%d",(int)round(Fdistance));
+      strcat(debugmsg,buf);
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      sprintf(buf, "%d",RLimitPWM_);
+      strcat(debugmsg,buf);
+      strcat(debugmsg,",");
+      memset(buf,0,9);
+      sprintf(buf, "%d",LLimitPWM_);
+      strcat(debugmsg,buf);
 
-  //create BLE notification message
-    //发送状态信息
-    memset(buf,0,9);
-    sprintf(buf, "%d",(int)round(t_angle));
-    strcat(debugmsg,buf);
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    sprintf(buf, "%d",(int)round(headingDegrees));
-    strcat(debugmsg,buf);
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    sprintf(buf, "%d",(int)round(Fdistance));
-    strcat(debugmsg,buf);
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    sprintf(buf, "%d",RLimitPWM_);
-    strcat(debugmsg,buf);
-    strcat(debugmsg,",");
-    memset(buf,0,9);
-    sprintf(buf, "%d",LLimitPWM_);
-    strcat(debugmsg,buf);
-    //电机控制
-    digitalWrite(pinRB,HIGH);
-    digitalWrite(pinRF,LOW);
-    analogWrite(MotorRPWM,RLimitPWM_);
-    digitalWrite(pinLB,HIGH);
-    digitalWrite(pinLF,LOW);
-    analogWrite(MotorLPWM,LLimitPWM_);
-    delay(runtime * 10);
+      BTSerial.println(taskId+","+beginTime+","+debugmsg);
+      //电机控制
+      digitalWrite(pinRB,HIGH);
+      digitalWrite(pinRF,LOW);
+      analogWrite(MotorRPWM,RLimitPWM_);
+      digitalWrite(pinLB,HIGH);
+      digitalWrite(pinLF,LOW);
+      analogWrite(MotorLPWM,LLimitPWM_);
+      delay(runtime * 10);
+  }
+  finishTask=true;
 }
 
 void turnR(float t_angle,int d)        //右轉(雙輪)
@@ -194,60 +202,79 @@ void turnR(float t_angle,int d)        //右轉(雙輪)
      char buf[10];
      memset(debugmsg,0,127);
      checkDirection();
-     if(abs(round(headingDegrees)-round(t_angle))>tolerance){
-       memset(buf,0,9);
-       sprintf(buf, "R");
-       strcat(debugmsg,buf);
-       strcat(debugmsg,",");
-       memset(buf,0,9);
-       sprintf(buf, "%d",(int)round(headingDegrees));
-       strcat(debugmsg,buf);
-       //控制马达右转
-       digitalWrite(pinRB,HIGH);
-       digitalWrite(pinRF,LOW);
-       analogWrite(MotorRPWM,baseLimitPWM);
-       digitalWrite(pinLB,LOW);
-       digitalWrite(pinLF,HIGH);
-       analogWrite(MotorLPWM,baseLimitPWM);
-       delay(d * 60);
-     }else{
-       stopp(1);
-       strcat(debugmsg,"Tstop");
-       finishTask=true;
-       return;
-     }
+    //  while(!finishTask){
+    //       if(abs(round(headingDegrees)-round(t_angle))>tolerance){
+    while(abs(round(headingDegrees)-round(t_angle))>tolerance){
+             memset(buf,0,9);
+             sprintf(buf, "R");
+             strcat(debugmsg,buf);
+             strcat(debugmsg,",");
+             memset(buf,0,9);
+             sprintf(buf, "%d",(int)round(headingDegrees));
+             strcat(debugmsg,buf);
+             //控制马达右转
+             digitalWrite(pinRB,HIGH);
+             digitalWrite(pinRF,LOW);
+             analogWrite(MotorRPWM,baseLimitPWM);
+             digitalWrite(pinLB,LOW);
+             digitalWrite(pinLF,HIGH);
+             analogWrite(MotorLPWM,baseLimitPWM);
+             delay(d * 60);
+        //   }else{
+        //    stopp(1);
+        //    strcat(debugmsg,"Tstop");
+        //    finishTask=true;
+        //    return;
+        // }
+        if(debug){
+          Serial.println(taskId+","+beginTime+","+debugmsg);
+        }
+        BTSerial.println(taskId+","+beginTime+","+debugmsg);
+        checkDirection();
+      }
+      finishTask=true;
     }
 
 void turnL(float t_angle,int e){
      char buf[10];
      memset(debugmsg,0,127);
      checkDirection();
-     if(abs(round(headingDegrees)-round(t_angle))>tolerance){
-        memset(buf,0,9);
-        sprintf(buf, "L");
-        strcat(debugmsg,buf);
-        strcat(debugmsg,",");
-        memset(buf,0,9);
-        sprintf(buf, "%d",(int)round(headingDegrees));
-        strcat(debugmsg,buf);
-        //控制马达左转
-        digitalWrite(pinRB,LOW);
-        digitalWrite(pinRF,HIGH);   //使馬達（右前）動作
-        analogWrite(MotorRPWM,baseLimitPWM);
-        digitalWrite(pinLB,HIGH);   //使馬達（左後）動作
-        digitalWrite(pinLF,LOW);
-        analogWrite(MotorLPWM,baseLimitPWM);
-        delay(e * 60);
-      }else{
-        stopp(1);
-        strcat(debugmsg,"Tstop");
-        finishTask=true;
-        return;
+    //  while(!finishTask){
+    //    if(abs(round(headingDegrees)-round(t_angle))>tolerance){
+     while(abs(round(headingDegrees)-round(t_angle))>tolerance){
+          memset(buf,0,9);
+          sprintf(buf, "L");
+          strcat(debugmsg,buf);
+          strcat(debugmsg,",");
+          memset(buf,0,9);
+          sprintf(buf, "%d",(int)round(headingDegrees));
+          strcat(debugmsg,buf);
+          //控制马达左转
+          digitalWrite(pinRB,LOW);
+          digitalWrite(pinRF,HIGH);   //使馬達（右前）動作
+          analogWrite(MotorRPWM,baseLimitPWM);
+          digitalWrite(pinLB,HIGH);   //使馬達（左後）動作
+          digitalWrite(pinLF,LOW);
+          analogWrite(MotorLPWM,baseLimitPWM);
+          delay(e * 60);
+        // }else{
+        //   stopp(1);
+        //   strcat(debugmsg,"Tstop");
+        //   finishTask=true;
+        //   return;
+        // }
+        if(debug){
+          Serial.println(taskId+","+beginTime+","+debugmsg);
+        }
+        BTSerial.println(taskId+","+beginTime+","+debugmsg);
+        checkDirection();
       }
+      finishTask=true;
     }
 
 void stopp(int f)         //停止
     {
+     memset(debugmsg,0,127);
      strcat(debugmsg,"Tstop");
      finishTask=true;
      digitalWrite(pinRB,HIGH);
@@ -255,12 +282,14 @@ void stopp(int f)         //停止
      digitalWrite(pinLB,HIGH);
      digitalWrite(pinLF,HIGH);
      delay(f * 100);
+     //蓝牙广播
+     BTSerial.println(taskId+","+beginTime+","+debugmsg);
     }
 
-void back(int g)          //後退
-    {
-      strcat(debugmsg,"back");
-      finishTask=true;
+void back(int g){
+     memset(debugmsg,0,127);
+     strcat(debugmsg,"back");
+     finishTask=true;
      digitalWrite(pinRB,LOW);  //使馬達（右後）動作
      digitalWrite(pinRF,HIGH);
      analogWrite(MotorRPWM,RLimitPWM);
@@ -268,9 +297,11 @@ void back(int g)          //後退
      digitalWrite(pinLF,HIGH);
      analogWrite(MotorLPWM,LLimitPWM);
      delay(g * 100);
+     //蓝牙广播
+     BTSerial.println(taskId+","+beginTime+","+debugmsg);
     }
-
-void ask_pin_F()   // 量出前方距離
+//测距
+void detect_F()
     {
       digitalWrite(outputPin, LOW);   // 讓超聲波發射低電壓2μs
       delayMicroseconds(2);
@@ -281,7 +312,7 @@ void ask_pin_F()   // 量出前方距離
       Fdistance= Fdistance/5.8/10;       // 將時間轉為距離距离（單位：公分）
       Fspeedd = Fdistance;              // 將距離 讀入Fspeedd(前速)
     }
-
+//检测方向
 void checkDirection(){
   Vector norm = compass.readNormalize();
   // Calculate heading
@@ -436,8 +467,6 @@ void loop(){
             advn(((long)angle_)+beginTime,1);
             break;
         }
-        //通过BLE广播状态信息
-        BTSerial.println(taskId+","+beginTime+","+debugmsg);
         //清空指令
         if(finishTask)
           cmd="";
@@ -446,6 +475,6 @@ void loop(){
         char abuf[10];
         memset(abuf,0,9);
         sprintf(abuf, "%d",(int)round(headingDegrees));
-        Serial.println("### "+taskId+","+beginTime+","+debugmsg+" ###"+abuf);
+        Serial.println("#LOOP# "+taskId+","+beginTime+","+debugmsg+" ###"+abuf);
       }
  }
