@@ -42,7 +42,7 @@ int LLimitPWM_=LLimitPWM;
 int RLimitPWM_=RLimitPWM;
 
 float headingDegrees=0.0;
-float tolerance=5.0;//角度偏差允许范围
+float tolerance=0.0;//角度偏差允许范围
 
 String cmd="";
 String taskId="";
@@ -79,6 +79,8 @@ void advn(long deadline,int runtime){
     while(currtime<deadline){
       char buf[10];
       memset(debugmsg,0,127);
+      int LLimitPWM_=LLimitPWM;
+      int RLimitPWM_=RLimitPWM;
       //测距
       detect_F();
       //判断前方距离如果小于10cm则停止
@@ -126,6 +128,9 @@ void advn(long deadline,int runtime){
     BTSerial.println(taskId+","+beginTime+","+debugmsg);
 }
 void advance(float t_angle,int runtime){
+  int LLimitPWM_=LLimitPWM;
+  int RLimitPWM_=RLimitPWM;
+
   checkDirection();
   long deadline=millis()+runtime;
   while(millis()<deadline){
@@ -200,6 +205,8 @@ void advance(float t_angle,int runtime){
 }
 //左转
 void turnR(float t_angle,int d){
+  int LLimitPWM_=LLimitPWM;
+  int RLimitPWM_=RLimitPWM;
     checkDirection();
     while(abs(round(headingDegrees)-round(t_angle))>tolerance){
              char buf[10];
@@ -229,6 +236,8 @@ void turnR(float t_angle,int d){
     }
 
 void turnL(float t_angle,int e){
+  int LLimitPWM_=LLimitPWM;
+  int RLimitPWM_=RLimitPWM;
      checkDirection();
      while(abs(round(headingDegrees)-round(t_angle))>tolerance){
           char buf[10];
@@ -274,6 +283,8 @@ void stopp(int f)         //停止
     }
 
 void back(int g){
+  int LLimitPWM_=LLimitPWM;
+  int RLimitPWM_=RLimitPWM;
      memset(debugmsg,0,127);
      strcat(debugmsg,"back");
      digitalWrite(pinRB,LOW);  //使馬達（右後）動作
@@ -443,8 +454,8 @@ void loop(){
             break;
           case 1:
             //为了精度，不建议使用动作1
-            //设定为5s运行时间
-            advance(angle_,5000);
+            //设定为10s运行时间
+            advance(angle_,10000.0);
             break;
           case 2:
             turnL(angle_,1);
